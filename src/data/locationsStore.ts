@@ -15,7 +15,23 @@ export const getStoredLocations = (): LocationItem[] => {
       return INITIAL_NITW_LOCATIONS;
     }
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_NITW_LOCATIONS;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Migrate old 'ALC Hostel' if present in existing client local storage
+      const migrated = parsed.map((loc: LocationItem) => {
+        if (loc.name === 'ALC Hostel' || loc.name === 'ALC') {
+          return {
+            ...loc,
+            name: 'Dr. B.R. Ambedkar Learning Centre (ALC)',
+            category: 'Departments' as const,
+            description:
+              'Central lecture hall complex, auditorium, seminar suites, and academic learning centre named after Dr. B.R. Ambedkar.',
+          };
+        }
+        return loc;
+      });
+      return migrated;
+    }
+    return INITIAL_NITW_LOCATIONS;
   } catch {
     return INITIAL_NITW_LOCATIONS;
   }

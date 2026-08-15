@@ -47,10 +47,19 @@ const RoutingControl: React.FC<RoutingControlProps> = ({
     }
 
     try {
-      // Standard OSRM public service with foot/walking profile
+      // Use OpenStreetMap Deutschland Pedestrian Foot Router (routed-foot)
+      // This specifically navigates along all campus footways, pedestrian pathways,
+      // steps, walkways, and dotted paths on OpenStreetMap.
       const router = (L as any).Routing.osrmv1({
-        serviceUrl: 'https://router.project-osrm.org/route/v1',
+        serviceUrl: 'https://routing.openstreetmap.de/routed-foot/route/v1',
         profile: 'foot',
+        routingOptions: {
+          alternatives: true,
+          steps: true,
+          geometries: 'geojson',
+          overview: 'full',
+        },
+        useHints: false,
       });
 
       const control = (L as any).Routing.control({
@@ -61,11 +70,11 @@ const RoutingControl: React.FC<RoutingControlProps> = ({
         router: router,
         lineOptions: {
           styles: [
-            { color: '#312e81', opacity: 0.85, weight: 6 }, // Deep indigo outline
-            { color: '#6366f1', opacity: 0.95, weight: 4, dashArray: '8, 8' }, // Indigo walking dashes
+            { color: '#1e1b4b', opacity: 0.9, weight: 6 }, // Deep indigo border
+            { color: '#4f46e5', opacity: 1.0, weight: 4, dashArray: '6, 6' }, // High-contrast walking dashes
           ],
           extendToWaypoints: true,
-          missingRouteTolerance: 10,
+          missingRouteTolerance: 20,
         },
         show: showLrmInstructions,
         addWaypoints: false,
@@ -141,7 +150,11 @@ const RoutingControl: React.FC<RoutingControlProps> = ({
       control.on('routesfound', (e: any) => {
         const routes = e.routes;
         if (routes && routes.length > 0) {
-          const selectedRoute = routes[0];
+          // Sort all discovered route alternatives by shortest total distance first
+          const sortedRoutes = [...routes].sort(
+            (a: any, b: any) => (a.summary?.totalDistance || 0) - (b.summary?.totalDistance || 0)
+          );
+          const selectedRoute = sortedRoutes[0];
           const summary = selectedRoute.summary;
 
           const instructions: RouteInstruction[] = (selectedRoute.instructions || []).map(
@@ -156,7 +169,7 @@ const RoutingControl: React.FC<RoutingControlProps> = ({
           if (onRouteCalculated) {
             onRouteCalculated({
               totalDistance: summary.totalDistance || 0,
-              totalTime: summary.totalTime || Math.round((summary.totalDistance || 0) / 1.3), // walking speed fallback (~1.3 m/s)
+              totalTime: summary.totalTime || Math.round((summary.totalDistance || 0) / 1.3), // walking speed (~1.3 m/s)
               instructions,
             });
           }

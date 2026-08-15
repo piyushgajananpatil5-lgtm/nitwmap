@@ -28,6 +28,7 @@ const MapPage: React.FC<MapPageProps> = ({
   const [endPoint, setEndPoint] = useState<RoutePoint | null>(null);
   const [routeSummary, setRouteSummary] = useState<RouteSummary | null>(null);
   const [isPickingMapFor, setIsPickingMapFor] = useState<'start' | 'end' | null>(null);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const filteredQuickLocations = headerSearch
     ? locations.filter((loc) =>
@@ -200,6 +201,7 @@ const MapPage: React.FC<MapPageProps> = ({
               onStartMapPick={(target) => setIsPickingMapFor(target)}
               isPickingMapFor={isPickingMapFor}
               onBackToDirectory={() => setActiveTab('directory')}
+              userCoords={userCoords}
             />
           )}
         </div>
@@ -219,6 +221,8 @@ const MapPage: React.FC<MapPageProps> = ({
             isPickerMode={Boolean(isPickingMapFor)}
             onMapClick={handleMapClick}
             onSwitchToRouteMode={() => setActiveTab('routes')}
+            userCoords={userCoords}
+            onSetUserCoords={setUserCoords}
           />
         </main>
       </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { RotateCcw, MapPin, Navigation, Footprints, Clock, Sparkles } from 'lucide-react';
+import { RotateCcw, MapPin, Navigation, Footprints, Clock, Sparkles, Crosshair, Loader2 } from 'lucide-react';
 import { LocationItem, LocationCategory, RoutePoint, RouteSummary } from '../types';
 import RoutingControl from './RoutingControl';
 
@@ -62,17 +62,70 @@ const createCustomIcon = (category: LocationCategory, isSelected = false) => {
   });
 };
 
-function MapController({ selectedLocation }: { selectedLocation: LocationItem | null }) {
+const createUserLocationIcon = () => {
+  const iconHtml = `
+    <div style="
+      position: relative;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    ">
+      <div style="
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: rgba(37, 99, 235, 0.3);
+        border-radius: 50%;
+        animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+      "></div>
+      <div style="
+        position: relative;
+        width: 16px;
+        height: 16px;
+        background: #2563eb;
+        border: 3px solid #ffffff;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      "></div>
+    </div>
+  `;
+
+  return L.divIcon({
+    html: iconHtml,
+    className: 'custom-user-location-marker',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
+  });
+};
+
+function MapController({
+  selectedLocation,
+  flyToCoords,
+}: {
+  selectedLocation: LocationItem | null;
+  flyToCoords?: [number, number] | null;
+}) {
   const map = useMap();
 
   useEffect(() => {
+    if (flyToCoords) {
+      map.flyTo(flyToCoords, 18, {
+        duration: 1.2,
+        easeLinearity: 0.25,
+      });
+      return;
+    }
+
     if (selectedLocation && typeof selectedLocation.lat === 'number' && typeof selectedLocation.lng === 'number') {
       map.flyTo([selectedLocation.lat, selectedLocation.lng], 18, {
         duration: 1.2,
         easeLinearity: 0.25,
       });
     }
-  }, [selectedLocation, map]);
+  }, [selectedLocation, flyToCoords, map]);
 
   return null;
 }
@@ -108,6 +161,8 @@ interface MapViewProps {
   onRouteCalculated?: (summary: RouteSummary | null) => void;
   routeSummary?: RouteSummary | null;
   onSwitchToRouteMode?: () => void;
+  userCoords?: { lat: number; lng: number } | null;
+  onSetUserCoords?: (coords: { lat: number; lng: number } | null) => void;
   className?: string;
 }
 
@@ -125,9 +180,13 @@ const MapView: React.FC<MapViewProps> = ({
   onRouteCalculated,
   routeSummary = null,
   onSwitchToRouteMode,
+  userCoords = null,
+  onSetUserCoords,
   className = '',
 }) => {
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  const [isLocatingUser, setIsLocatingUser] = useState(false);
+  const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
 
   const handleReset = () => {
     if (mapInstance) {
@@ -135,7 +194,36 @@ const MapView: React.FC<MapViewProps> = ({
         duration: 1.0,
       });
       onSelectLocation(null);
+      setFlyToTarget(null);
     }
+  };
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsLocatingUser(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsLocatingUser(false);
+        const { latitude, longitude } = position.coords;
+        if (onSetUserCoords) {
+          onSetUserCoords({ lat: latitude, lng: longitude });
+        }
+        setFlyToTarget([latitude, longitude]);
+        if (mapInstance) {
+          mapInstance.flyTo([latitude, longitude], 18, { duration: 1.2 });
+        }
+      },
+      (err) => {
+        setIsLocatingUser(false);
+        console.warn('Geolocation failed:', err);
+        alert('Could not acquire your current location. Please allow browser location access.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
   };
 
   const getBadgeCategoryStyle = (category: LocationCategory) => {
@@ -163,9 +251,9 @@ const MapView: React.FC<MapViewProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-black text-white">Walking Path Active</span>
+                <span className="text-[11px] font-black text-white">Shortest Path</span>
                 <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30">
-                  OSRM
+                  Walkway Graph
                 </span>
               </div>
               <p className="text-[10px] text-indigo-200 font-medium">
@@ -175,30 +263,35 @@ const MapView: React.FC<MapViewProps> = ({
           </div>
         )}
 
-        {/* Live Campus Status badge in theme style */}
-        <div className="hidden sm:flex items-center gap-3 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-lg border border-slate-200/80 pointer-events-auto transition-all">
-          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-800 flex items-center justify-center font-bold text-xs border border-indigo-100">
-            {locations.length}
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-800 leading-tight">Live Campus Map</p>
-            <p className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Leaflet Routing active
-            </p>
-          </div>
-        </div>
+        {/* Action Controls Group */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Locate Me (GPS) Button */}
+          <button
+            id="btn-locate-me-map"
+            onClick={handleLocateMe}
+            disabled={isLocatingUser}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-900 text-white hover:bg-indigo-800 font-semibold text-xs rounded-xl shadow-md border border-indigo-700 transition-all active:scale-95 cursor-pointer"
+            title="Locate My Current Position (GPS)"
+          >
+            {isLocatingUser ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-200" />
+            ) : (
+              <Crosshair className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span>{isLocatingUser ? 'Locating...' : 'Current Location'}</span>
+          </button>
 
-        {/* Reset View Button */}
-        <button
-          id="btn-reset-map-view"
-          onClick={handleReset}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-white/95 backdrop-blur-md text-slate-700 hover:text-indigo-900 hover:bg-slate-50 font-semibold text-xs rounded-xl shadow-md border border-slate-200/90 transition-all active:scale-95 cursor-pointer pointer-events-auto"
-          title="Reset to Full Campus View"
-        >
-          <RotateCcw className="w-3.5 h-3.5 text-indigo-700" />
-          <span>Reset Campus View</span>
-        </button>
+          {/* Reset View Button */}
+          <button
+            id="btn-reset-map-view"
+            onClick={handleReset}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white/95 backdrop-blur-md text-slate-700 hover:text-indigo-900 hover:bg-slate-50 font-semibold text-xs rounded-xl shadow-md border border-slate-200/90 transition-all active:scale-95 cursor-pointer"
+            title="Reset to Full Campus View"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-indigo-700" />
+            <span>Campus Center</span>
+          </button>
+        </div>
       </div>
 
       {isPickerMode && (
@@ -224,7 +317,7 @@ const MapView: React.FC<MapViewProps> = ({
           maxZoom={19}
         />
 
-        <MapController selectedLocation={selectedLocation} />
+        <MapController selectedLocation={selectedLocation} flyToCoords={flyToTarget} />
         <MapClickHandler isPickerMode={isPickerMode} onMapClick={onMapClick} />
 
         {/* Leaflet Routing Machine Engine Component */}
@@ -234,6 +327,59 @@ const MapView: React.FC<MapViewProps> = ({
           onRouteCalculated={onRouteCalculated}
           showLrmInstructions={false}
         />
+
+        {/* Current User Location Marker */}
+        {userCoords && (
+          <Marker position={[userCoords.lat, userCoords.lng]} icon={createUserLocationIcon()}>
+            <Popup className="custom-leaflet-popup">
+              <div className="p-3 max-w-[240px] bg-white rounded-xl">
+                <div className="flex items-center gap-1.5 mb-1 text-blue-600 font-bold text-xs">
+                  <Crosshair className="w-3.5 h-3.5" />
+                  <span>📍 You Are Here</span>
+                </div>
+                <p className="text-[10px] text-slate-500 font-mono">
+                  {userCoords.lat.toFixed(5)}°, {userCoords.lng.toFixed(5)}°
+                </p>
+                <div className="mt-2.5 pt-2 border-t border-slate-100 grid grid-cols-2 gap-1.5">
+                  {onSetStartPoint && (
+                    <button
+                      onClick={() => {
+                        onSetStartPoint({
+                          lat: userCoords.lat,
+                          lng: userCoords.lng,
+                          name: '📍 My Current Location',
+                          category: 'Others',
+                        });
+                        if (onSwitchToRouteMode) onSwitchToRouteMode();
+                      }}
+                      className="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-lg border border-emerald-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      <span>Route (A)</span>
+                    </button>
+                  )}
+                  {onSetEndPoint && (
+                    <button
+                      onClick={() => {
+                        onSetEndPoint({
+                          lat: userCoords.lat,
+                          lng: userCoords.lng,
+                          name: '📍 My Current Location',
+                          category: 'Others',
+                        });
+                        if (onSwitchToRouteMode) onSwitchToRouteMode();
+                      }}
+                      className="px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 text-[10px] font-bold rounded-lg border border-red-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span>
+                      <span>Route (B)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
 
         {/* Render Locations */}
         {locations.map((loc) => {

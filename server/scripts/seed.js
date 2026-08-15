@@ -15,11 +15,11 @@ export const seedLocations = [
     description: 'Mega Hostel (1.8K capacity) for B.Tech senior students with high-speed Wi-Fi and amenities.',
   },
   {
-    name: 'ALC Hostel',
-    category: 'Hostels',
+    name: 'Dr. B.R. Ambedkar Learning Centre (ALC)',
+    category: 'Departments',
     lat: 17.9835,
     lng: 79.5310,
-    description: 'Asian Liberation Club hostel block located close to IFC mess.',
+    description: 'Central lecture hall complex, auditorium, seminar suites, and academic learning centre named after Dr. B.R. Ambedkar.',
   },
   {
     name: 'Hostel A',

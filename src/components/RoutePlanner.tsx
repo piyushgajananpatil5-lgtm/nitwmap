@@ -14,6 +14,9 @@ import {
   Flame,
   Milestone,
   CheckCircle,
+  Crosshair,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { LocationItem, RoutePoint, RouteSummary } from '../types';
 
@@ -29,28 +32,29 @@ interface RoutePlannerProps {
   onStartMapPick: (target: 'start' | 'end') => void;
   isPickingMapFor: 'start' | 'end' | null;
   onBackToDirectory: () => void;
+  userCoords?: { lat: number; lng: number } | null;
 }
 
 const POPULAR_NITW_ROUTES = [
   {
-    title: 'Mega Hostel to CSE Dept',
-    from: '1.8K Ultra Mega Hostel',
-    to: 'Department of Computer Science & Engineering',
+    title: 'Mega Hostel to ALC (Ambedkar Centre)',
+    from: '1.8K Hostel (Mega Hostel)',
+    to: 'Dr. B.R. Ambedkar Learning Centre (ALC)',
   },
   {
-    title: 'Main Gate to Library (LRC)',
-    from: 'Main Entrance Gate',
-    to: 'Dr. B.R. Ambedkar Learning Resource Centre',
+    title: 'Main Gate to ALC',
+    from: 'NITW Main Entrance Gate',
+    to: 'Dr. B.R. Ambedkar Learning Centre (ALC)',
   },
   {
-    title: '1K Hostel to Central Mess',
-    from: '1K Boys Hostel',
-    to: 'Central Mess & Food Court',
+    title: 'ALC to Central Library',
+    from: 'Dr. B.R. Ambedkar Learning Centre (ALC)',
+    to: 'Central Library',
   },
   {
     title: 'Admin Block to Sports Complex',
-    from: 'Main Administrative Building',
-    to: 'Student Activity Centre (SAC) & Sports Complex',
+    from: 'Central Building (Admin Block)',
+    to: 'Student Activity Centre (SAC)',
   },
 ];
 
@@ -66,14 +70,69 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
   onStartMapPick,
   isPickingMapFor,
   onBackToDirectory,
+  userCoords = null,
 }) => {
   const [showInstructions, setShowInstructions] = useState(true);
   const [showApiKeyInfo, setShowApiKeyInfo] = useState(false);
+  const [isLocating, setIsLocating] = useState<'start' | 'end' | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  const handleUseCurrentLocation = (target: 'start' | 'end') => {
+    setLocationError(null);
+
+    // If we already have cached/live userCoords
+    if (userCoords) {
+      const point: RoutePoint = {
+        lat: userCoords.lat,
+        lng: userCoords.lng,
+        name: '📍 My Current Location',
+        category: 'Others',
+      };
+      if (target === 'start') onSetStartPoint(point);
+      else onSetEndPoint(point);
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setIsLocating(target);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsLocating(null);
+        const point: RoutePoint = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          name: '📍 My Current Location',
+          category: 'Others',
+        };
+        if (target === 'start') onSetStartPoint(point);
+        else onSetEndPoint(point);
+      },
+      (error) => {
+        setIsLocating(null);
+        console.warn('Geolocation error:', error);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError('Location permission denied. Please allow location access.');
+        } else {
+          setLocationError('Unable to acquire GPS position. Try again or pick on map.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+  };
 
   const handleLocationSelect = (idOrName: string, target: 'start' | 'end') => {
     if (!idOrName) {
       if (target === 'start') onSetStartPoint(null);
       else onSetEndPoint(null);
+      return;
+    }
+
+    if (idOrName === '__CURRENT_LOCATION__') {
+      handleUseCurrentLocation(target);
       return;
     }
 
@@ -147,8 +206,8 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
               <Footprints className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-xs font-black text-slate-900 leading-tight">Campus Walking Routes</h2>
-              <p className="text-[10px] text-indigo-700 font-medium">Leaflet Routing Machine Engine</p>
+              <h2 className="text-xs font-black text-slate-900 leading-tight">Shortest Walking Routes</h2>
+              <p className="text-[10px] text-indigo-700 font-medium">OSM Footway &amp; Pedestrian Graph</p>
             </div>
           </div>
 
@@ -159,6 +218,14 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
             Directory View
           </button>
         </div>
+
+        {/* Location Error alert if any */}
+        {locationError && (
+          <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-1.5 text-[11px] text-red-700">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{locationError}</span>
+          </div>
+        )}
 
         {/* Origin / Destination Input Cards */}
         <div className="space-y-2 mt-3 relative">
@@ -173,18 +240,42 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                 Start Point (A)
               </span>
-              <button
-                type="button"
-                onClick={() => onStartMapPick('start')}
-                className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
-                  isPickingMapFor === 'start'
-                    ? 'bg-emerald-600 text-white animate-pulse'
-                    : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
-                }`}
-              >
-                <MapPin className="w-2.5 h-2.5" />
-                <span>{isPickingMapFor === 'start' ? 'Click Map...' : 'Pick on Map'}</span>
-              </button>
+
+              <div className="flex items-center gap-1">
+                {/* Use Current GPS Location Button */}
+                <button
+                  type="button"
+                  id="btn-use-current-location-start"
+                  onClick={() => handleUseCurrentLocation('start')}
+                  disabled={isLocating === 'start'}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
+                    startPoint?.name.includes('Current Location')
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                  }`}
+                  title="Use My Current GPS Location as Start Point"
+                >
+                  {isLocating === 'start' ? (
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  ) : (
+                    <Crosshair className="w-2.5 h-2.5" />
+                  )}
+                  <span>{isLocating === 'start' ? 'GPS...' : 'My Location'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onStartMapPick('start')}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
+                    isPickingMapFor === 'start'
+                      ? 'bg-emerald-600 text-white animate-pulse'
+                      : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                  }`}
+                >
+                  <MapPin className="w-2.5 h-2.5" />
+                  <span>{isPickingMapFor === 'start' ? 'Click Map...' : 'Pick'}</span>
+                </button>
+              </div>
             </div>
 
             <select
@@ -193,11 +284,14 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
               className="w-full text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
               <option value="">-- Choose Starting Point --</option>
-              {locations.map((loc) => (
-                <option key={loc._id || loc.id} value={loc.name}>
-                  {loc.name} ({loc.category})
-                </option>
-              ))}
+              <option value="__CURRENT_LOCATION__">📍 My Current Location (GPS)</option>
+              <optgroup label="Campus Locations">
+                {locations.map((loc) => (
+                  <option key={loc._id || loc.id} value={loc.name}>
+                    {loc.name} ({loc.category})
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
 
@@ -224,18 +318,42 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
                 <span className="w-2 h-2 rounded-full bg-red-600"></span>
                 Destination (B)
               </span>
-              <button
-                type="button"
-                onClick={() => onStartMapPick('end')}
-                className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
-                  isPickingMapFor === 'end'
-                    ? 'bg-red-600 text-white animate-pulse'
-                    : 'bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-700'
-                }`}
-              >
-                <MapPin className="w-2.5 h-2.5" />
-                <span>{isPickingMapFor === 'end' ? 'Click Map...' : 'Pick on Map'}</span>
-              </button>
+
+              <div className="flex items-center gap-1">
+                {/* Use Current GPS Location Button for Destination */}
+                <button
+                  type="button"
+                  id="btn-use-current-location-end"
+                  onClick={() => handleUseCurrentLocation('end')}
+                  disabled={isLocating === 'end'}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
+                    endPoint?.name.includes('Current Location')
+                      ? 'bg-red-600 text-white'
+                      : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                  }`}
+                  title="Use My Current GPS Location as Destination"
+                >
+                  {isLocating === 'end' ? (
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  ) : (
+                    <Crosshair className="w-2.5 h-2.5" />
+                  )}
+                  <span>{isLocating === 'end' ? 'GPS...' : 'My Location'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onStartMapPick('end')}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer ${
+                    isPickingMapFor === 'end'
+                      ? 'bg-red-600 text-white animate-pulse'
+                      : 'bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-700'
+                  }`}
+                >
+                  <MapPin className="w-2.5 h-2.5" />
+                  <span>{isPickingMapFor === 'end' ? 'Click Map...' : 'Pick'}</span>
+                </button>
+              </div>
             </div>
 
             <select
@@ -244,11 +362,14 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
               className="w-full text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
             >
               <option value="">-- Choose Destination --</option>
-              {locations.map((loc) => (
-                <option key={loc._id || loc.id} value={loc.name}>
-                  {loc.name} ({loc.category})
-                </option>
-              ))}
+              <option value="__CURRENT_LOCATION__">📍 My Current Location (GPS)</option>
+              <optgroup label="Campus Locations">
+                {locations.map((loc) => (
+                  <option key={loc._id || loc.id} value={loc.name}>
+                    {loc.name} ({loc.category})
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
         </div>
@@ -262,7 +383,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
             <div className="flex items-center justify-between border-b border-indigo-800 pb-2.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1">
                 <CheckCircle className="w-3 h-3 text-emerald-400" />
-                Active Walking Route
+                Shortest Pedestrian Route
               </span>
               <button
                 onClick={onClearRoute}
@@ -283,7 +404,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
               <div className="bg-indigo-800/70 p-2.5 rounded-xl border border-indigo-700/50">
                 <Footprints className="w-4 h-4 text-indigo-300 mx-auto mb-1" />
                 <div className="text-sm font-black">{formatDistance(routeSummary.totalDistance)}</div>
-                <div className="text-[9px] text-indigo-200 font-medium">Distance</div>
+                <div className="text-[9px] text-indigo-200 font-medium">Shortest Distance</div>
               </div>
 
               <div className="bg-indigo-800/70 p-2.5 rounded-xl border border-indigo-700/50">
@@ -319,7 +440,7 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-slate-800 text-[11px] leading-tight">
-                            {step.text || 'Continue along the campus road'}
+                            {step.text || 'Continue along the campus footpath'}
                           </p>
                           {step.distance > 0 && (
                             <p className="text-[10px] text-slate-400 mt-0.5">
@@ -341,12 +462,12 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
             </div>
             <h3 className="text-xs font-bold text-slate-800">Select Start &amp; Destination</h3>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-              Choose any two buildings above or click directly on the campus map to calculate walking routes.
+              Use your <strong>Current Location</strong>, choose any campus building, or click directly on the map to calculate the shortest walkway path.
             </p>
           </div>
         ) : (
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center animate-pulse">
-            <p className="text-xs font-bold text-indigo-900">Calculating shortest walking path...</p>
+            <p className="text-xs font-bold text-indigo-900">Calculating shortest pedestrian path along campus walkways...</p>
           </div>
         )}
 
@@ -380,15 +501,15 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
               <Key className="w-3.5 h-3.5 text-indigo-700" />
-              API Key Requirements
+              Pedestrian Routing Engine
             </span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-200">
-              0 Keys Needed
+              OSM Footway Router
             </span>
           </div>
 
           <p className="text-[11px] text-slate-600 leading-relaxed">
-            This routing feature operates using <strong>Leaflet Routing Machine</strong> and the open <strong>OSRM Pedestrian Graph</strong> on OpenStreetMap.
+            Routes navigate through all campus <strong>dotted lines (footpaths, walkways, steps, and pedestrian shortcuts)</strong> on OpenStreetMap, computing the shortest overall distance.
           </p>
 
           <button
@@ -397,13 +518,14 @@ const RoutePlanner: React.FC<RoutePlannerProps> = ({
             className="text-[10px] font-bold text-indigo-700 hover:underline flex items-center gap-1 pt-1"
           >
             <Info className="w-3 h-3" />
-            <span>{showApiKeyInfo ? 'Hide technical backend details' : 'View provider information'}</span>
+            <span>{showApiKeyInfo ? 'Hide details' : 'View router specs'}</span>
           </button>
 
           {showApiKeyInfo && (
             <div className="text-[10px] text-slate-600 bg-white p-2.5 rounded-lg border border-indigo-100 space-y-1 mt-1 font-mono">
-              <p>• <strong>Default Router:</strong> OSRM Public Foot Profile (Zero API key / Free)</p>
-              <p>• <strong>Optional Alternates:</strong> If you ever wish to use Mapbox Directions or GraphHopper, you can configure an optional <code className="bg-slate-100 px-1 rounded">MAPBOX_API_KEY</code> or <code className="bg-slate-100 px-1 rounded">GRAPHHOPPER_API_KEY</code>, but none are required for full campus routing.</p>
+              <p>• <strong>Primary Router:</strong> OSM routed-foot pedestrian engine</p>
+              <p>• <strong>Criteria:</strong> Minimum distance optimization</p>
+              <p>• <strong>Shortcuts:</strong> Traverses all dotted walkway paths</p>
             </div>
           )}
         </div>
