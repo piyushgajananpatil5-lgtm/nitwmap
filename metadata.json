@@ -1,0 +1,6 @@
+{
+  "name": "NITW Campus Navigator",
+  "description": "Interactive MERN campus map and location directory for NIT Warangal with category filtering, flyTo navigation, and admin management.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
